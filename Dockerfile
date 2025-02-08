@@ -18,6 +18,11 @@ COPY . .
 # Set Python path to include app directory
 ENV PYTHONPATH=/app
 
+# These are default values that will be overridden by runtime environment variables
+ENV AIRTABLE_API_KEY=""
+ENV AIRTABLE_BASE_ID=""
+ENV AIRTABLE_TABLE_NAME=""
+
 # Expose the port the app runs on
 EXPOSE 8000
 
