@@ -8,7 +8,7 @@ import asyncio
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig
 from crawl4ai.content_filter_strategy import PruningContentFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
-from app.auth import get_api_key, router as auth_router
+from app.auth import get_api_key, router as auth_router, init_airtable
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -17,6 +17,11 @@ app = FastAPI(
     redoc_url="/redoc",
     openapi_url="/openapi.json"
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup."""
+    await init_airtable()
 
 # Add CORS middleware
 app.add_middleware(
