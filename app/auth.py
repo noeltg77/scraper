@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Security, Depends, APIRouter
 from fastapi.security.api_key import APIKeyHeader
-from starlette.status import HTTP_403_FORBIDDEN, HTTP_503_FORBIDDEN
+from starlette.status import HTTP_403_FORBIDDEN, HTTP_503_SERVICE_UNAVAILABLE
 from pyairtable.api.table import Table
 from typing import Optional
 import os
@@ -87,7 +87,7 @@ async def get_api_key(api_key_header: str = Security(api_key_header)) -> str:
     try:
         if table is None:
             raise HTTPException(
-                status_code=HTTP_503_FORBIDDEN,
+                status_code=HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Airtable connection not initialized"
             )
 
