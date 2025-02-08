@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from pydantic import BaseModel, HttpUrl
 from typing import Optional, List, Dict, Any
 import asyncio
@@ -9,7 +11,27 @@ from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from app.auth import get_api_key, router as auth_router
 
 # Initialize FastAPI app
-app = FastAPI(title="Web Crawler API")
+app = FastAPI(
+    title="Web Crawler API",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json"
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
+
+# Add trusted host middleware
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["*"]  # In production, you might want to restrict this
+)
 
 # Include the auth router first
 app.include_router(auth_router)
@@ -156,12 +178,15 @@ if __name__ == "__main__":
     print(f"Server IP: {host_ip}")
     print(f"Documentation available at: http://{host_ip}:8002/docs")
     
-    # Keep 0.0.0.0 to allow external access, but log the actual IP
+    # Configure uvicorn with proxy settings
     uvicorn.run(
         app,
         host="0.0.0.0",
         port=8002,
         log_level="info",
         proxy_headers=True,
-        forwarded_allow_ips="*"
+        forwarded_allow_ips="*",
+        server_header=False,
+        timeout_keep_alive=65,
+        workers=4
     ) 
