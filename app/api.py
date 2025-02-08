@@ -97,11 +97,15 @@ async def crawl_url(request: CrawlRequest, api_key: str = Depends(get_api_key)):
             result = await crawler.arun(str(request.url), config=crawler_cfg)
 
             if result.success:
+                # Extract href from link objects
+                internal_links = [link['href'] for link in result.links.get("internal", [])]
+                external_links = [link['href'] for link in result.links.get("external", [])]
+                
                 return CrawlResponse(
                     success=True,
                     url=result.url,
-                    internal_links=result.links.get("internal", []),
-                    external_links=result.links.get("external", []),
+                    internal_links=internal_links,
+                    external_links=external_links,
                     images=[{
                         "src": img["src"],
                         "alt": img.get("alt", ""),
