@@ -6,13 +6,22 @@ import asyncio
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig
 from crawl4ai.content_filter_strategy import PruningContentFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
-from auth import get_api_key, router as auth_router
+from app.auth import get_api_key, router as auth_router
 
 # Initialize FastAPI app
 app = FastAPI(title="Web Crawler API")
 
 # Include the auth router first
 app.include_router(auth_router)
+
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """
+    Health check endpoint to verify the API is running.
+    Does not require authentication.
+    """
+    return {"status": "healthy", "message": "API is running"}
 
 # Define request/response models
 class CrawlRequest(BaseModel):
@@ -38,7 +47,7 @@ class MarkdownResponse(BaseModel):
     raw_markdown_length: Optional[int] = None
     fit_markdown_length: Optional[int] = None
     fit_markdown: Optional[str] = None
-    raw_markdown: Optional[str] = None  # Added to help with debugging
+    raw_markdown: Optional[str] = None
     error_message: Optional[str] = None
 
 @app.post("/crawl", response_model=CrawlResponse)
@@ -47,16 +56,16 @@ async def crawl_url(request: CrawlRequest, api_key: str = Depends(get_api_key)):
     Crawl a specified URL and return links and images.
     Requires a valid API key in the X-API-Key header.
     """
-    crawler_cfg = CrawlerRunConfig(
-        exclude_external_links=False,
-        exclude_domains=[""],
-        exclude_social_media_links=False,
-        exclude_external_images=True,
-        wait_for_images=True,
-        verbose=True
-    )
-
     try:
+        crawler_cfg = CrawlerRunConfig(
+            exclude_external_links=False,
+            exclude_domains=[""],
+            exclude_social_media_links=False,
+            exclude_external_images=True,
+            wait_for_images=True,
+            verbose=True
+        )
+
         async with AsyncWebCrawler() as crawler:
             result = await crawler.arun(str(request.url), config=crawler_cfg)
 
@@ -79,6 +88,7 @@ async def crawl_url(request: CrawlRequest, api_key: str = Depends(get_api_key)):
                     error_message=result.error_message
                 )
     except Exception as e:
+        print(f"Error in crawl_url: {str(e)}")  # Added logging
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/markdown", response_model=MarkdownResponse)
@@ -101,7 +111,7 @@ async def generate_markdown(request: MarkdownRequest, api_key: str = Depends(get
         # Step 3: Configure crawler with the markdown generator
         config = CrawlerRunConfig(
             markdown_generator=md_generator,
-            exclude_external_links=False,  # Match the settings from fit_markdown.py
+            exclude_external_links=False,
             exclude_domains=[""],
             exclude_social_media_links=False,
             exclude_external_images=True,
@@ -120,7 +130,7 @@ async def generate_markdown(request: MarkdownRequest, api_key: str = Depends(get
                     raw_markdown_length=len(result.markdown_v2.raw_markdown),
                     fit_markdown_length=len(result.markdown_v2.fit_markdown),
                     fit_markdown=result.markdown_v2.fit_markdown,
-                    raw_markdown=result.markdown_v2.raw_markdown  # Added for debugging
+                    raw_markdown=result.markdown_v2.raw_markdown
                 )
             else:
                 return MarkdownResponse(
@@ -130,9 +140,10 @@ async def generate_markdown(request: MarkdownRequest, api_key: str = Depends(get
                 )
 
     except Exception as e:
-        print(f"Error processing markdown: {str(e)}")  # Added for debugging
+        print(f"Error in generate_markdown: {str(e)}")  # Added logging
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
+    print("Starting API server...")  # Added logging
     uvicorn.run(app, host="0.0.0.0", port=8000) 
