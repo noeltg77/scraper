@@ -22,11 +22,12 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 # Clean the environment variables
-AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY").strip()
-AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID").strip()
-AIRTABLE_TABLE_NAME = os.getenv("AIRTABLE_TABLE_NAME").split('#')[0].strip()  # Remove any comments
+AIRTABLE_API_KEY = os.getenv("AIRTABLE_API_KEY", "").strip()
+AIRTABLE_BASE_ID = os.getenv("AIRTABLE_BASE_ID", "").strip()
+AIRTABLE_TABLE_NAME = os.getenv("AIRTABLE_TABLE_NAME", "").strip()
 
 # Print configuration for debugging
+print(f"Auth Module Configuration:")
 print(f"Table Name: '{AIRTABLE_TABLE_NAME}'")
 print(f"Base ID: '{AIRTABLE_BASE_ID}'")
 print(f"Airtable API Key: '{AIRTABLE_API_KEY[:5]}...'")  # Only print first 5 chars for security
@@ -124,8 +125,4 @@ async def request_api_key():
     return {
         "message": "Please contact the administrator to request an API key",
         "contact": "your-email@example.com"
-    }
-
-# Create a test app for running this file directly
-app = FastAPI()
-app.include_router(router) 
+    } 
