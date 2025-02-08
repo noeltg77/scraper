@@ -178,9 +178,9 @@ if __name__ == "__main__":
     print(f"Server IP: {host_ip}")
     print(f"Documentation available at: http://{host_ip}:8002/docs")
     
-    # Configure uvicorn with proxy settings
+    # Configure uvicorn with proxy settings and application import string
     uvicorn.run(
-        app,
+        "app.api:app",  # Use the import string format
         host="0.0.0.0",
         port=8002,
         log_level="info",
