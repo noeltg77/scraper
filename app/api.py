@@ -145,5 +145,23 @@ async def generate_markdown(request: MarkdownRequest, api_key: str = Depends(get
 
 if __name__ == "__main__":
     import uvicorn
-    print("Starting API server...")  # Added logging
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    import socket
+    
+    # Get the host machine's IP address
+    hostname = socket.gethostname()
+    host_ip = socket.gethostbyname(hostname)
+    
+    print(f"Starting API server...")
+    print(f"Server hostname: {hostname}")
+    print(f"Server IP: {host_ip}")
+    print(f"Documentation available at: http://{host_ip}:8002/docs")
+    
+    # Keep 0.0.0.0 to allow external access, but log the actual IP
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8002,
+        log_level="info",
+        proxy_headers=True,
+        forwarded_allow_ips="*"
+    ) 
