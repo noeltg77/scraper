@@ -88,6 +88,26 @@ async def crawl_url(request: CrawlRequest, api_key: str = Depends(get_api_key)):
     Requires a valid API key in the X-API-Key header.
     """
     try:
+        # Define extensions to filter out
+        media_extensions = {
+            # Images
+            '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff',
+            # Audio
+            '.mp3', '.wav', '.ogg', '.m4a', '.aac',
+            # Video
+            '.mp4', '.webm', '.avi', '.mov', '.wmv', '.flv',
+            # Documents
+            '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+            '.zip', '.rar', '.7z', '.tar', '.gz',
+            # Other media
+            '.swf', '.woff', '.woff2', '.ttf', '.eot'
+        }
+
+        # Function to check if URL is a media file
+        def is_media_url(url: str) -> bool:
+            lower_url = url.lower()
+            return any(lower_url.endswith(ext) for ext in media_extensions)
+
         crawler_cfg = CrawlerRunConfig(
             exclude_external_links=False,
             exclude_domains=[""],
@@ -101,20 +121,24 @@ async def crawl_url(request: CrawlRequest, api_key: str = Depends(get_api_key)):
             result = await crawler.arun(str(request.url), config=crawler_cfg)
 
             if result.success:
-                # Format links as objects with additional information
+                # Filter and format internal links
                 internal_links = [
                     LinkInfo(
                         url=link['href'],
                         domain=link.get('domain', ''),
                         type='internal'
                     ) for link in result.links.get("internal", [])
+                    if not is_media_url(link['href'])
                 ]
+
+                # Filter and format external links
                 external_links = [
                     LinkInfo(
                         url=link['href'],
                         domain=link.get('domain', ''),
                         type='external'
                     ) for link in result.links.get("external", [])
+                    if not is_media_url(link['href'])
                 ]
                 
                 return CrawlResponse(
