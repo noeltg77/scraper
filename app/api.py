@@ -54,11 +54,16 @@ async def health_check():
 class CrawlRequest(BaseModel):
     url: HttpUrl
 
+class LinkInfo(BaseModel):
+    url: str
+    domain: str
+    type: str
+
 class CrawlResponse(BaseModel):
     success: bool
     url: str
-    internal_links: Optional[List[str]] = None
-    external_links: Optional[List[str]] = None
+    internal_links: Optional[List[LinkInfo]] = None
+    external_links: Optional[List[LinkInfo]] = None
     images: Optional[List[Dict[str, Any]]] = None
     error_message: Optional[str] = None
 
@@ -97,9 +102,21 @@ async def crawl_url(request: CrawlRequest, api_key: str = Depends(get_api_key)):
             result = await crawler.arun(str(request.url), config=crawler_cfg)
 
             if result.success:
-                # Extract href from link objects
-                internal_links = [link['href'] for link in result.links.get("internal", [])]
-                external_links = [link['href'] for link in result.links.get("external", [])]
+                # Format links as objects with additional information
+                internal_links = [
+                    LinkInfo(
+                        url=link['href'],
+                        domain=link.get('domain', ''),
+                        type='internal'
+                    ) for link in result.links.get("internal", [])
+                ]
+                external_links = [
+                    LinkInfo(
+                        url=link['href'],
+                        domain=link.get('domain', ''),
+                        type='external'
+                    ) for link in result.links.get("external", [])
+                ]
                 
                 return CrawlResponse(
                     success=True,
