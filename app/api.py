@@ -105,12 +105,12 @@ async def crawl_url(request: CrawlRequest, api_key: str = Depends(get_api_key)):
 
         # Function to normalize URL
         def normalize_url(url: str) -> str:
-            # Remove trailing slash and/or hash
-            url = url.rstrip('/#')
+            # Remove any hash fragments first
+            url = url.split('#')[0]
+            # Remove trailing slash
+            url = url.rstrip('/')
             # Remove 'www.' if present
             url = url.replace('www.', '')
-            # Remove fragments
-            url = url.split('#')[0]
             # Remove default ports
             url = url.replace(':80/', '/').replace(':443/', '/')
             # Ensure consistent protocol
