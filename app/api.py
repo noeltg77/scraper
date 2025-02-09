@@ -79,7 +79,6 @@ class MarkdownResponse(BaseModel):
     raw_markdown_length: Optional[int] = None
     fit_markdown_length: Optional[int] = None
     fit_markdown: Optional[str] = None
-    raw_markdown: Optional[str] = None
     error_message: Optional[str] = None
 
 @app.post("/crawl", response_model=CrawlResponse)
@@ -158,13 +157,7 @@ async def generate_markdown(request: MarkdownRequest, api_key: str = Depends(get
 
         # Step 3: Configure crawler with the markdown generator
         config = CrawlerRunConfig(
-            markdown_generator=md_generator,
-            exclude_external_links=False,
-            exclude_domains=[""],
-            exclude_social_media_links=False,
-            exclude_external_images=True,
-            wait_for_images=True,
-            verbose=True
+            markdown_generator=md_generator
         )
 
         # Run the crawler
@@ -177,8 +170,7 @@ async def generate_markdown(request: MarkdownRequest, api_key: str = Depends(get
                     url=str(request.url),
                     raw_markdown_length=len(result.markdown_v2.raw_markdown),
                     fit_markdown_length=len(result.markdown_v2.fit_markdown),
-                    fit_markdown=result.markdown_v2.fit_markdown,
-                    raw_markdown=result.markdown_v2.raw_markdown
+                    fit_markdown=result.markdown_v2.fit_markdown
                 )
             else:
                 return MarkdownResponse(
