@@ -103,10 +103,29 @@ async def crawl_url(request: CrawlRequest, api_key: str = Depends(get_api_key)):
             '.swf', '.woff', '.woff2', '.ttf', '.eot'
         }
 
+        # Function to normalize URL
+        def normalize_url(url: str) -> str:
+            # Remove trailing slash and/or hash
+            url = url.rstrip('/#')
+            # Remove 'www.' if present
+            url = url.replace('www.', '')
+            # Remove fragments
+            url = url.split('#')[0]
+            # Remove default ports
+            url = url.replace(':80/', '/').replace(':443/', '/')
+            # Ensure consistent protocol
+            if url.startswith('http://'):
+                url = 'https://' + url[7:]
+            return url.lower()
+
         # Function to check if URL is a media file
         def is_media_url(url: str) -> bool:
             lower_url = url.lower()
             return any(lower_url.endswith(ext) for ext in media_extensions)
+
+        # Function to check if URLs are effectively the same
+        def is_same_url(url1: str, url2: str) -> bool:
+            return normalize_url(url1) == normalize_url(url2)
 
         crawler_cfg = CrawlerRunConfig(
             exclude_external_links=False,
@@ -117,8 +136,11 @@ async def crawl_url(request: CrawlRequest, api_key: str = Depends(get_api_key)):
             verbose=True
         )
 
+        input_url = str(request.url)
+        normalized_input_url = normalize_url(input_url)
+
         async with AsyncWebCrawler() as crawler:
-            result = await crawler.arun(str(request.url), config=crawler_cfg)
+            result = await crawler.arun(input_url, config=crawler_cfg)
 
             if result.success:
                 # Filter and format internal links
@@ -128,7 +150,7 @@ async def crawl_url(request: CrawlRequest, api_key: str = Depends(get_api_key)):
                         domain=link.get('domain', ''),
                         type='internal'
                     ) for link in result.links.get("internal", [])
-                    if not is_media_url(link['href'])
+                    if not is_media_url(link['href']) and not is_same_url(link['href'], input_url)
                 ]
 
                 # Filter and format external links
@@ -138,7 +160,7 @@ async def crawl_url(request: CrawlRequest, api_key: str = Depends(get_api_key)):
                         domain=link.get('domain', ''),
                         type='external'
                     ) for link in result.links.get("external", [])
-                    if not is_media_url(link['href'])
+                    if not is_media_url(link['href']) and not is_same_url(link['href'], input_url)
                 ]
                 
                 return CrawlResponse(
