@@ -76,9 +76,10 @@ class MarkdownRequest(BaseModel):
 class MarkdownResponse(BaseModel):
     success: bool
     url: str
+    raw_markdown: Optional[str] = None
+    fit_markdown: Optional[str] = None
     raw_markdown_length: Optional[int] = None
     fit_markdown_length: Optional[int] = None
-    fit_markdown: Optional[str] = None
     error_message: Optional[str] = None
 
 @app.post("/crawl", response_model=CrawlResponse)
@@ -214,9 +215,10 @@ async def generate_markdown(request: MarkdownRequest, api_key: str = Depends(get
                 return MarkdownResponse(
                     success=True,
                     url=str(request.url),
+                    raw_markdown=result.markdown_v2.raw_markdown,
+                    fit_markdown=result.markdown_v2.fit_markdown,
                     raw_markdown_length=len(result.markdown_v2.raw_markdown),
-                    fit_markdown_length=len(result.markdown_v2.fit_markdown),
-                    fit_markdown=result.markdown_v2.fit_markdown
+                    fit_markdown_length=len(result.markdown_v2.fit_markdown)
                 )
             else:
                 return MarkdownResponse(
