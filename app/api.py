@@ -307,10 +307,10 @@ async def advanced_crawl(request: AdvancedRequest, api_key: str = Depends(get_ap
 
             # Get unique internal links
             internal_urls = {
-                link['href'] for link in result.links.get("internal", [])
-                if not is_media_url(link['href'])
+                normalize_url(link['href']) for link in result.links.get("internal", [])
+                if not is_media_url(link['href']) and not is_same_url(link['href'], input_url)
             }
-            internal_urls.add(input_url)  # Include the original URL
+            internal_urls.add(normalize_url(input_url))  # Include the original URL
             
             print(f"Found {len(internal_urls)} unique internal URLs to process")
             print(f"URLs to process: {internal_urls}")
@@ -328,7 +328,7 @@ async def advanced_crawl(request: AdvancedRequest, api_key: str = Depends(get_ap
                         if md_result.success:
                             print(f"Successfully generated markdown for {url}")
                             return PageMarkdown(
-                                url=url,
+                                url=url,  # Keep the original URL in the response
                                 raw_markdown=md_result.markdown_v2.raw_markdown,
                                 fit_markdown=md_result.markdown_v2.fit_markdown,
                                 raw_markdown_length=len(md_result.markdown_v2.raw_markdown),
