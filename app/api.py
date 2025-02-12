@@ -18,6 +18,46 @@ app = FastAPI(
     openapi_url="/openapi.json"
 )
 
+# Define media extensions to filter out
+media_extensions = {
+    # Images
+    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff',
+    # Audio
+    '.mp3', '.wav', '.ogg', '.m4a', '.aac',
+    # Video
+    '.mp4', '.webm', '.avi', '.mov', '.wmv', '.flv',
+    # Documents
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+    '.zip', '.rar', '.7z', '.tar', '.gz',
+    # Other media
+    '.swf', '.woff', '.woff2', '.ttf', '.eot'
+}
+
+# Utility functions
+def normalize_url(url: str) -> str:
+    """Normalize URL by removing fragments, trailing slashes, and standardizing protocol."""
+    # Remove any hash fragments first
+    url = url.split('#')[0]
+    # Remove trailing slash
+    url = url.rstrip('/')
+    # Remove 'www.' if present
+    url = url.replace('www.', '')
+    # Remove default ports
+    url = url.replace(':80/', '/').replace(':443/', '/')
+    # Ensure consistent protocol
+    if url.startswith('http://'):
+        url = 'https://' + url[7:]
+    return url.lower()
+
+def is_media_url(url: str) -> bool:
+    """Check if URL points to a media file."""
+    lower_url = url.lower()
+    return any(lower_url.endswith(ext) for ext in media_extensions)
+
+def is_same_url(url1: str, url2: str) -> bool:
+    """Compare two URLs after normalization."""
+    return normalize_url(url1) == normalize_url(url2)
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup."""
@@ -82,6 +122,25 @@ class MarkdownResponse(BaseModel):
     fit_markdown_length: Optional[int] = None
     error_message: Optional[str] = None
 
+class AdvancedRequest(BaseModel):
+    url: HttpUrl
+    threshold: Optional[float] = 0.45
+    threshold_type: Optional[str] = "dynamic"
+    min_word_threshold: Optional[int] = 5
+
+class PageMarkdown(BaseModel):
+    url: str
+    raw_markdown: Optional[str] = None
+    fit_markdown: Optional[str] = None
+    raw_markdown_length: Optional[int] = None
+    fit_markdown_length: Optional[int] = None
+
+class AdvancedResponse(BaseModel):
+    success: bool
+    url: str
+    pages: List[PageMarkdown] = []
+    error_message: Optional[str] = None
+
 @app.post("/crawl", response_model=CrawlResponse)
 async def crawl_url(request: CrawlRequest, api_key: str = Depends(get_api_key)):
     """
@@ -89,45 +148,6 @@ async def crawl_url(request: CrawlRequest, api_key: str = Depends(get_api_key)):
     Requires a valid API key in the X-API-Key header.
     """
     try:
-        # Define extensions to filter out
-        media_extensions = {
-            # Images
-            '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg', '.ico', '.tiff',
-            # Audio
-            '.mp3', '.wav', '.ogg', '.m4a', '.aac',
-            # Video
-            '.mp4', '.webm', '.avi', '.mov', '.wmv', '.flv',
-            # Documents
-            '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
-            '.zip', '.rar', '.7z', '.tar', '.gz',
-            # Other media
-            '.swf', '.woff', '.woff2', '.ttf', '.eot'
-        }
-
-        # Function to normalize URL
-        def normalize_url(url: str) -> str:
-            # Remove any hash fragments first
-            url = url.split('#')[0]
-            # Remove trailing slash
-            url = url.rstrip('/')
-            # Remove 'www.' if present
-            url = url.replace('www.', '')
-            # Remove default ports
-            url = url.replace(':80/', '/').replace(':443/', '/')
-            # Ensure consistent protocol
-            if url.startswith('http://'):
-                url = 'https://' + url[7:]
-            return url.lower()
-
-        # Function to check if URL is a media file
-        def is_media_url(url: str) -> bool:
-            lower_url = url.lower()
-            return any(lower_url.endswith(ext) for ext in media_extensions)
-
-        # Function to check if URLs are effectively the same
-        def is_same_url(url1: str, url2: str) -> bool:
-            return normalize_url(url1) == normalize_url(url2)
-
         crawler_cfg = CrawlerRunConfig(
             exclude_external_links=False,
             exclude_domains=[""],
@@ -229,6 +249,117 @@ async def generate_markdown(request: MarkdownRequest, api_key: str = Depends(get
 
     except Exception as e:
         print(f"Error in generate_markdown: {str(e)}")  # Added logging
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/advanced", response_model=AdvancedResponse)
+async def advanced_crawl(request: AdvancedRequest, api_key: str = Depends(get_api_key)):
+    """
+    Advanced crawl that combines link discovery and markdown generation.
+    First crawls the URL for internal links, then generates markdown for each link.
+    Requires a valid API key in the X-API-Key header.
+    """
+    try:
+        print(f"Starting advanced crawl for URL: {request.url}")
+        
+        # First, crawl the URL to get internal links
+        crawler_cfg = CrawlerRunConfig(
+            exclude_external_links=False,
+            exclude_domains=[""],
+            exclude_social_media_links=False,
+            exclude_external_images=True,
+            wait_for_images=True,
+            verbose=True
+        )
+
+        input_url = str(request.url)
+        print(f"Normalized input URL: {normalize_url(input_url)}")
+
+        # Create markdown generator configuration
+        print("Creating markdown generator configuration...")
+        prune_filter = PruningContentFilter(
+            threshold=request.threshold,
+            threshold_type=request.threshold_type,
+            min_word_threshold=request.min_word_threshold
+        )
+        md_generator = DefaultMarkdownGenerator(content_filter=prune_filter)
+        md_config = CrawlerRunConfig(
+            markdown_generator=md_generator,
+            verbose=True
+        )
+
+        # Create a semaphore to limit concurrent requests
+        # Adjust this number based on your needs and server capacity
+        semaphore = asyncio.Semaphore(5)  # Process 5 URLs concurrently
+
+        print("Initializing crawler...")
+        async with AsyncWebCrawler() as crawler:
+            # First get all internal links
+            print("Crawling for internal links...")
+            result = await crawler.arun(input_url, config=crawler_cfg)
+            
+            if not result.success:
+                print(f"Failed to crawl initial URL: {result.error_message}")
+                return AdvancedResponse(
+                    success=False,
+                    url=input_url,
+                    error_message=f"Failed to crawl initial URL: {result.error_message}"
+                )
+
+            # Get unique internal links
+            internal_urls = {
+                link['href'] for link in result.links.get("internal", [])
+                if not is_media_url(link['href'])
+            }
+            internal_urls.add(input_url)  # Include the original URL
+            
+            print(f"Found {len(internal_urls)} unique internal URLs to process")
+            print(f"URLs to process: {internal_urls}")
+
+            # Pre-warm the browser with a quick request
+            print("Pre-warming browser...")
+            await crawler.arun(input_url, config=md_config)
+
+            # Helper function to process a single URL with semaphore
+            async def process_url(url: str) -> Optional[PageMarkdown]:
+                async with semaphore:  # Limit concurrent requests
+                    try:
+                        print(f"Processing URL: {url}")
+                        md_result = await crawler.arun(url, config=md_config)
+                        if md_result.success:
+                            print(f"Successfully generated markdown for {url}")
+                            return PageMarkdown(
+                                url=url,
+                                raw_markdown=md_result.markdown_v2.raw_markdown,
+                                fit_markdown=md_result.markdown_v2.fit_markdown,
+                                raw_markdown_length=len(md_result.markdown_v2.raw_markdown),
+                                fit_markdown_length=len(md_result.markdown_v2.fit_markdown)
+                            )
+                        else:
+                            print(f"Failed to generate markdown for {url}: {md_result.error_message}")
+                            return None
+                    except Exception as e:
+                        print(f"Error processing URL {url}: {str(e)}")
+                        return None
+
+            # Process URLs concurrently with controlled parallelism
+            tasks = [process_url(url) for url in internal_urls]
+            results = await asyncio.gather(*tasks)
+            
+            # Filter out None results (failed URLs)
+            pages = [page for page in results if page is not None]
+
+            print(f"Successfully processed {len(pages)} pages")
+            return AdvancedResponse(
+                success=True,
+                url=input_url,
+                pages=pages
+            )
+
+    except Exception as e:
+        print(f"Error in advanced_crawl: {str(e)}")
+        print(f"Error type: {type(e)}")
+        import traceback
+        print(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
